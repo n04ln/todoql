@@ -1,4 +1,4 @@
-# echoql
+# todoql
 
 ## Required
 - <a href="https://github.com/golang/dep">github.com/golang/dep</a>
