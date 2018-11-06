@@ -6,3 +6,8 @@ type Todo struct {
 	Done   bool
 	UserID string
 }
+
+type User struct {
+	ID   string
+	Name string
+}
