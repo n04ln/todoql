@@ -4,15 +4,21 @@ package todoql
 
 import (
 	context "context"
-	"fmt"
-	"sync"
 
+	"github.com/NoahOrberg/todoql/loader"
 	model "github.com/NoahOrberg/todoql/model"
+	"github.com/NoahOrberg/todoql/repository"
+	"github.com/satori/uuid"
 )
 
 type Resolver struct {
-	todos sync.Map
-	next  int
+	repo repository.Repo
+}
+
+func NewResolver(rep repository.Repo) (*Resolver, error) {
+	return &Resolver{
+		repo: rep,
+	}, nil
 }
 
 func (r *Resolver) Mutation() MutationResolver {
@@ -24,51 +30,54 @@ func (r *Resolver) Query() QueryResolver {
 func (r *Resolver) Todo() TodoResolver {
 	return &todoResolver{r}
 }
+func (r *Resolver) User() UserResolver {
+	return &userResolver{r}
+}
 
 type mutationResolver struct{ *Resolver }
 
 func (r *mutationResolver) CreateTodo(ctx context.Context, input NewTodo) (model.Todo, error) {
-	todo := model.Todo{
+	uuidv4, err := uuid.NewV4()
+	if err != nil {
+		return model.Todo{}, err
+	}
+	t := model.Todo{
+		ID:     uuidv4.String(),
 		Text:   input.Text,
-		ID:     fmt.Sprintf("%d", r.next),
+		Done:   false,
 		UserID: input.UserID,
 	}
-	r.todos.Store(r.next, todo)
-	r.next++
-	return todo, nil
+	if err := r.repo.StoreTodo(&t); err != nil {
+		return model.Todo{}, nil
+	}
+
+	return t, nil
 }
 
 type queryResolver struct{ *Resolver }
 
-func (r *queryResolver) Todos(ctx context.Context) ([]model.Todo, error) {
-	todos := make([]model.Todo, 0, 0)
-	r.todos.Range(func(k, v interface{}) bool {
-		vv, ok := v.(model.Todo)
-		if !ok {
-			return true // continue
-		}
-		todos = append(todos, vv)
-		return true
-	})
-	return todos, nil
-}
-func (r *queryResolver) Todo(ctx context.Context, userId string) ([]model.Todo, error) {
-	todos := make([]model.Todo, 0, 0)
-	r.todos.Range(func(k, v interface{}) bool {
-		vv, ok := v.(model.Todo)
-		if !ok {
-			return true // continue
-		}
-		if vv.UserID == userId {
-			todos = append(todos, vv)
-		}
-		return true
-	})
-	return todos, nil
+func (r *queryResolver) GetUser(ctx context.Context, id string) (model.User, error) {
+	return model.User{
+		ID:   "qwer",
+		Name: "noah",
+	}, nil
 }
 
 type todoResolver struct{ *Resolver }
 
-func (r *todoResolver) User(ctx context.Context, obj *model.Todo) (User, error) {
-	return User{ID: obj.UserID, Name: "user " + obj.UserID}, nil
+func (r *todoResolver) User(ctx context.Context, obj *model.Todo) (model.User, error) {
+	return model.User{
+		ID:   "qwer",
+		Name: "noah",
+	}, nil
+}
+
+type userResolver struct{ *Resolver }
+
+func (r *userResolver) Todos(ctx context.Context, obj *model.User) ([]model.Todo, error) {
+	todos, err := loader.LoadTodoByUserID(ctx, obj.ID)
+	if err != nil {
+		return nil, err
+	}
+	return todos, nil
 }

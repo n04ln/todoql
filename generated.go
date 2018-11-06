@@ -34,6 +34,7 @@ type ResolverRoot interface {
 	Mutation() MutationResolver
 	Query() QueryResolver
 	Todo() TodoResolver
+	User() UserResolver
 }
 
 type DirectiveRoot struct {
@@ -45,8 +46,7 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		Todos func(childComplexity int) int
-		Todo  func(childComplexity int, userId string) int
+		GetUser func(childComplexity int, id string) int
 	}
 
 	Todo struct {
@@ -57,8 +57,9 @@ type ComplexityRoot struct {
 	}
 
 	User struct {
-		Id   func(childComplexity int) int
-		Name func(childComplexity int) int
+		Id    func(childComplexity int) int
+		Name  func(childComplexity int) int
+		Todos func(childComplexity int) int
 	}
 }
 
@@ -66,11 +67,13 @@ type MutationResolver interface {
 	CreateTodo(ctx context.Context, input NewTodo) (model.Todo, error)
 }
 type QueryResolver interface {
-	Todos(ctx context.Context) ([]model.Todo, error)
-	Todo(ctx context.Context, userId string) ([]model.Todo, error)
+	GetUser(ctx context.Context, id string) (model.User, error)
 }
 type TodoResolver interface {
-	User(ctx context.Context, obj *model.Todo) (User, error)
+	User(ctx context.Context, obj *model.Todo) (model.User, error)
+}
+type UserResolver interface {
+	Todos(ctx context.Context, obj *model.User) ([]model.Todo, error)
 }
 
 func field_Mutation_createTodo_args(rawArgs map[string]interface{}) (map[string]interface{}, error) {
@@ -88,17 +91,17 @@ func field_Mutation_createTodo_args(rawArgs map[string]interface{}) (map[string]
 
 }
 
-func field_Query_todo_args(rawArgs map[string]interface{}) (map[string]interface{}, error) {
+func field_Query_getUser_args(rawArgs map[string]interface{}) (map[string]interface{}, error) {
 	args := map[string]interface{}{}
 	var arg0 string
-	if tmp, ok := rawArgs["userId"]; ok {
+	if tmp, ok := rawArgs["id"]; ok {
 		var err error
 		arg0, err = graphql.UnmarshalString(tmp)
 		if err != nil {
 			return nil, err
 		}
 	}
-	args["userId"] = arg0
+	args["id"] = arg0
 	return args, nil
 
 }
@@ -173,24 +176,17 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 
 		return e.complexity.Mutation.CreateTodo(childComplexity, args["input"].(NewTodo)), true
 
-	case "Query.todos":
-		if e.complexity.Query.Todos == nil {
+	case "Query.getUser":
+		if e.complexity.Query.GetUser == nil {
 			break
 		}
 
-		return e.complexity.Query.Todos(childComplexity), true
-
-	case "Query.todo":
-		if e.complexity.Query.Todo == nil {
-			break
-		}
-
-		args, err := field_Query_todo_args(rawArgs)
+		args, err := field_Query_getUser_args(rawArgs)
 		if err != nil {
 			return 0, false
 		}
 
-		return e.complexity.Query.Todo(childComplexity, args["userId"].(string)), true
+		return e.complexity.Query.GetUser(childComplexity, args["id"].(string)), true
 
 	case "Todo.id":
 		if e.complexity.Todo.Id == nil {
@@ -233,6 +229,13 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 		}
 
 		return e.complexity.User.Name(childComplexity), true
+
+	case "User.todos":
+		if e.complexity.User.Todos == nil {
+			break
+		}
+
+		return e.complexity.User.Todos(childComplexity), true
 
 	}
 	return 0, false
@@ -363,19 +366,10 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("Query")
-		case "todos":
+		case "getUser":
 			wg.Add(1)
 			go func(i int, field graphql.CollectedField) {
-				out.Values[i] = ec._Query_todos(ctx, field)
-				if out.Values[i] == graphql.Null {
-					invalid = true
-				}
-				wg.Done()
-			}(i, field)
-		case "todo":
-			wg.Add(1)
-			go func(i int, field graphql.CollectedField) {
-				out.Values[i] = ec._Query_todo(ctx, field)
+				out.Values[i] = ec._Query_getUser(ctx, field)
 				if out.Values[i] == graphql.Null {
 					invalid = true
 				}
@@ -397,65 +391,9 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 }
 
 // nolint: vetshadow
-func (ec *executionContext) _Query_todos(ctx context.Context, field graphql.CollectedField) graphql.Marshaler {
-	rctx := &graphql.ResolverContext{
-		Object: "Query",
-		Args:   nil,
-		Field:  field,
-	}
-	ctx = graphql.WithResolverContext(ctx, rctx)
-	resTmp := ec.FieldMiddleware(ctx, nil, func(rctx context.Context) (interface{}, error) {
-		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Query().Todos(rctx)
-	})
-	if resTmp == nil {
-		if !ec.HasError(rctx) {
-			ec.Errorf(ctx, "must not be null")
-		}
-		return graphql.Null
-	}
-	res := resTmp.([]model.Todo)
-	rctx.Result = res
-
-	arr1 := make(graphql.Array, len(res))
-	var wg sync.WaitGroup
-
-	isLen1 := len(res) == 1
-	if !isLen1 {
-		wg.Add(len(res))
-	}
-
-	for idx1 := range res {
-		idx1 := idx1
-		rctx := &graphql.ResolverContext{
-			Index:  &idx1,
-			Result: &res[idx1],
-		}
-		ctx := graphql.WithResolverContext(ctx, rctx)
-		f := func(idx1 int) {
-			if !isLen1 {
-				defer wg.Done()
-			}
-			arr1[idx1] = func() graphql.Marshaler {
-
-				return ec._Todo(ctx, field.Selections, &res[idx1])
-			}()
-		}
-		if isLen1 {
-			f(idx1)
-		} else {
-			go f(idx1)
-		}
-
-	}
-	wg.Wait()
-	return arr1
-}
-
-// nolint: vetshadow
-func (ec *executionContext) _Query_todo(ctx context.Context, field graphql.CollectedField) graphql.Marshaler {
+func (ec *executionContext) _Query_getUser(ctx context.Context, field graphql.CollectedField) graphql.Marshaler {
 	rawArgs := field.ArgumentMap(ec.Variables)
-	args, err := field_Query_todo_args(rawArgs)
+	args, err := field_Query_getUser_args(rawArgs)
 	if err != nil {
 		ec.Error(ctx, err)
 		return graphql.Null
@@ -468,7 +406,7 @@ func (ec *executionContext) _Query_todo(ctx context.Context, field graphql.Colle
 	ctx = graphql.WithResolverContext(ctx, rctx)
 	resTmp := ec.FieldMiddleware(ctx, nil, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Query().Todo(rctx, args["userId"].(string))
+		return ec.resolvers.Query().GetUser(rctx, args["id"].(string))
 	})
 	if resTmp == nil {
 		if !ec.HasError(rctx) {
@@ -476,42 +414,10 @@ func (ec *executionContext) _Query_todo(ctx context.Context, field graphql.Colle
 		}
 		return graphql.Null
 	}
-	res := resTmp.([]model.Todo)
+	res := resTmp.(model.User)
 	rctx.Result = res
 
-	arr1 := make(graphql.Array, len(res))
-	var wg sync.WaitGroup
-
-	isLen1 := len(res) == 1
-	if !isLen1 {
-		wg.Add(len(res))
-	}
-
-	for idx1 := range res {
-		idx1 := idx1
-		rctx := &graphql.ResolverContext{
-			Index:  &idx1,
-			Result: &res[idx1],
-		}
-		ctx := graphql.WithResolverContext(ctx, rctx)
-		f := func(idx1 int) {
-			if !isLen1 {
-				defer wg.Done()
-			}
-			arr1[idx1] = func() graphql.Marshaler {
-
-				return ec._Todo(ctx, field.Selections, &res[idx1])
-			}()
-		}
-		if isLen1 {
-			f(idx1)
-		} else {
-			go f(idx1)
-		}
-
-	}
-	wg.Wait()
-	return arr1
+	return ec._User(ctx, field.Selections, &res)
 }
 
 // nolint: vetshadow
@@ -707,7 +613,7 @@ func (ec *executionContext) _Todo_user(ctx context.Context, field graphql.Collec
 		}
 		return graphql.Null
 	}
-	res := resTmp.(User)
+	res := resTmp.(model.User)
 	rctx.Result = res
 
 	return ec._User(ctx, field.Selections, &res)
@@ -716,9 +622,10 @@ func (ec *executionContext) _Todo_user(ctx context.Context, field graphql.Collec
 var userImplementors = []string{"User"}
 
 // nolint: gocyclo, errcheck, gas, goconst
-func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj *User) graphql.Marshaler {
+func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj *model.User) graphql.Marshaler {
 	fields := graphql.CollectFields(ctx, sel, userImplementors)
 
+	var wg sync.WaitGroup
 	out := graphql.NewOrderedMap(len(fields))
 	invalid := false
 	for i, field := range fields {
@@ -737,11 +644,20 @@ func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj
 			if out.Values[i] == graphql.Null {
 				invalid = true
 			}
+		case "todos":
+			wg.Add(1)
+			go func(i int, field graphql.CollectedField) {
+				out.Values[i] = ec._User_todos(ctx, field, obj)
+				if out.Values[i] == graphql.Null {
+					invalid = true
+				}
+				wg.Done()
+			}(i, field)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
 	}
-
+	wg.Wait()
 	if invalid {
 		return graphql.Null
 	}
@@ -749,7 +665,7 @@ func (ec *executionContext) _User(ctx context.Context, sel ast.SelectionSet, obj
 }
 
 // nolint: vetshadow
-func (ec *executionContext) _User_id(ctx context.Context, field graphql.CollectedField, obj *User) graphql.Marshaler {
+func (ec *executionContext) _User_id(ctx context.Context, field graphql.CollectedField, obj *model.User) graphql.Marshaler {
 	rctx := &graphql.ResolverContext{
 		Object: "User",
 		Args:   nil,
@@ -772,7 +688,7 @@ func (ec *executionContext) _User_id(ctx context.Context, field graphql.Collecte
 }
 
 // nolint: vetshadow
-func (ec *executionContext) _User_name(ctx context.Context, field graphql.CollectedField, obj *User) graphql.Marshaler {
+func (ec *executionContext) _User_name(ctx context.Context, field graphql.CollectedField, obj *model.User) graphql.Marshaler {
 	rctx := &graphql.ResolverContext{
 		Object: "User",
 		Args:   nil,
@@ -792,6 +708,62 @@ func (ec *executionContext) _User_name(ctx context.Context, field graphql.Collec
 	res := resTmp.(string)
 	rctx.Result = res
 	return graphql.MarshalString(res)
+}
+
+// nolint: vetshadow
+func (ec *executionContext) _User_todos(ctx context.Context, field graphql.CollectedField, obj *model.User) graphql.Marshaler {
+	rctx := &graphql.ResolverContext{
+		Object: "User",
+		Args:   nil,
+		Field:  field,
+	}
+	ctx = graphql.WithResolverContext(ctx, rctx)
+	resTmp := ec.FieldMiddleware(ctx, obj, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.User().Todos(rctx, obj)
+	})
+	if resTmp == nil {
+		if !ec.HasError(rctx) {
+			ec.Errorf(ctx, "must not be null")
+		}
+		return graphql.Null
+	}
+	res := resTmp.([]model.Todo)
+	rctx.Result = res
+
+	arr1 := make(graphql.Array, len(res))
+	var wg sync.WaitGroup
+
+	isLen1 := len(res) == 1
+	if !isLen1 {
+		wg.Add(len(res))
+	}
+
+	for idx1 := range res {
+		idx1 := idx1
+		rctx := &graphql.ResolverContext{
+			Index:  &idx1,
+			Result: &res[idx1],
+		}
+		ctx := graphql.WithResolverContext(ctx, rctx)
+		f := func(idx1 int) {
+			if !isLen1 {
+				defer wg.Done()
+			}
+			arr1[idx1] = func() graphql.Marshaler {
+
+				return ec._Todo(ctx, field.Selections, &res[idx1])
+			}()
+		}
+		if isLen1 {
+			f(idx1)
+		} else {
+			go f(idx1)
+		}
+
+	}
+	wg.Wait()
+	return arr1
 }
 
 var __DirectiveImplementors = []string{"__Directive"}
@@ -2161,11 +2133,11 @@ var parsedSchema = gqlparser.MustLoadSchema(
 type User {
   id: ID!
   name: String!
+  todos: [Todo!]!
 }
 
 type Query {
-  todos: [Todo!]!
-  todo(userId: String!): [Todo!]!
+  getUser(id: String!): User!
 }
 
 input NewTodo {

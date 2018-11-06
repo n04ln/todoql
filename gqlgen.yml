@@ -14,3 +14,5 @@ resolver:
 models:
   Todo:
     model: github.com/NoahOrberg/todoql/model.Todo
+  User:
+    model: github.com/NoahOrberg/todoql/model.User
