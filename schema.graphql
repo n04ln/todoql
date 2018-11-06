@@ -8,11 +8,11 @@ type Todo {
 type User {
   id: ID!
   name: String!
+  todos: [Todo!]!
 }
 
 type Query {
-  todos: [Todo!]!
-  todo(userId: String!): [Todo!]!
+  getUser(id: String!): User!
 }
 
 input NewTodo {
